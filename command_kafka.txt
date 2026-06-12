@@ -1,13 +1,25 @@
-wget https://downloads.apache.org/kafka/3.3.1/kafka_2.12-3.3.1.tgz
-tar -xvf kafka_2.12-3.3.1.tgz
+sudo yum update -y
+sudo yum install -y docker
+
+--------------------------
+Start Docker 
+
+sudo systemctl start docker
+sudo systemctl enable docker
+
+docker --version
+docker run hello-world
+docker pull apache/kafka:4.1.0
 
 
 -----------------------
 java -version
-sudo yum install java-1.8.0-openjdk
-java -version
-cd kafka_2.12-3.3.1
+sudo yum install -y java-17-amazon-corretto
+java -versionjava -version
 
+
+Latest Kafka versions of 4.x doesn't require to start zookeeper. 
+It uses KRaft mode to start the KAFKA.
 Start Zoo-keeper:
 -------------------------------
 bin/zookeeper-server-start.sh config/zookeeper.properties
