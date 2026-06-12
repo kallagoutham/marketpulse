@@ -20,6 +20,60 @@ java -versionjava -version
 
 Latest Kafka versions of 4.x doesn't require to start zookeeper. 
 It uses KRaft mode to start the KAFKA.
+
+
+docker run -d \
+  --name kafka \
+  -p 9092:9092 \
+  -e KAFKA_NODE_ID=1 \
+  -e KAFKA_PROCESS_ROLES=broker,controller \
+  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
+  -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
+  -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+  -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
+  -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+  apache/kafka:4.1.0
+
+
+  or 
+
+  1. create server.properties 
+
+  2. Add properties 
+
+  3. Mount that to the properties of the KAFKA docker image we are trying to run. 
+
+  4. docker run -d \
+  --name kafka \
+  -p 9092:9092 \
+  -v "$PWD/server.properties:/mnt/shared/config/server.properties" \
+  apache/kafka:4.1.0 \
+  /opt/kafka/bin/kafka-server-start.sh /mnt/shared/config/server.properties
+
+  node.id=1
+process.roles=broker,controller
+
+controller.quorum.voters=1@localhost:9093
+
+listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+advertised.listeners=PLAINTEXT://localhost:9092
+
+controller.listener.names=CONTROLLER
+listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+inter.broker.listener.name=PLAINTEXT
+
+log.dirs=/tmp/kraft-combined-logs
+
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+transaction.state.log.min.isr=1
+
+
+
 Start Zoo-keeper:
 -------------------------------
 bin/zookeeper-server-start.sh config/zookeeper.properties

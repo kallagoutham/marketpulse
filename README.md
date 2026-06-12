@@ -1,8 +1,14 @@
-# Stock Market Real-Time Data Analysis Using Kafka
+# MarketPulse: Stock Market Real-Time Data Analysis Using Kafka
 
-End-to-end data engineering project for simulating stock market events, streaming them through Apache Kafka, storing raw market data in Amazon S3, cataloging it with AWS Glue, and querying it with Amazon Athena.
+MarketPulse is a standalone Django project for managing and documenting an end-to-end stock market data engineering pipeline. The architecture simulates stock market events, streams them through Apache Kafka, stores raw market data in Amazon S3, catalogs it with AWS Glue, and queries it with Amazon Athena.
+
+The Django layer provides a secure web application foundation around the pipeline, including admin/auth support, CSRF protection, password validation, environment-based configuration, and a place to add operational controls for producers, consumers, and analytics jobs.
 
 ## Architecture
+
+![MarketPulse architecture diagram](Architecture.jpg)
+
+The diagram above shows the original project architecture. The Mermaid version below keeps the same flow in a source-controlled format that renders directly in GitHub Markdown.
 
 ```mermaid
 flowchart LR
@@ -43,6 +49,7 @@ flowchart LR
 
 | Component | Purpose |
 | --- | --- |
+| Django Web App | Secure control plane and dashboard for the data pipeline. |
 | CSV Dataset | Source stock market data used for simulation. |
 | Python App | Reads CSV rows and simulates real-time stock events. |
 | Kafka Producer | Sends stock records to a Kafka topic. |
@@ -97,10 +104,18 @@ ORDER BY total_volume DESC;
 
 ```text
 marketpulse/
-├── data/
-│   └── indexProcessed.csv
-├── kafka_producer.py
-├── kafka_consumer.py
+├── dashboard/
+│   ├── static/
+│   ├── templates/
+│   ├── urls.py
+│   └── views.py
+├── marketpulse/
+│   ├── settings.py
+│   ├── urls.py
+│   ├── asgi.py
+│   └── wsgi.py
+├── manage.py
+├── .env.example
 ├── requirements.txt
 └── README.md
 ```
@@ -108,6 +123,7 @@ marketpulse/
 ## Prerequisites
 
 - Python 3.10 or later
+- Django 5.2
 - Apache Kafka
 - AWS account
 - Amazon EC2 instance for Kafka
@@ -116,7 +132,61 @@ marketpulse/
 - Amazon Athena query setup
 - AWS CLI configured with appropriate permissions
 
-## Setup Notes
+## Run the Django App Locally
+
+Create and activate a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Create a local environment file:
+
+```bash
+cp .env.example .env
+```
+
+Update `.env` with your local values, then run migrations:
+
+```bash
+python manage.py migrate
+```
+
+Create an admin user:
+
+```bash
+python manage.py createsuperuser
+```
+
+Start the Django development server:
+
+```bash
+python manage.py runserver
+```
+
+Open the app at:
+
+```text
+http://127.0.0.1:8000/
+```
+
+## Security Notes
+
+- Keep `DJANGO_SECRET_KEY`, AWS credentials, Kafka endpoints, and S3 bucket names in environment variables.
+- Do not commit `.env` files or cloud credentials.
+- Use `DJANGO_DEBUG=False` outside local development.
+- Set `DJANGO_ALLOWED_HOSTS` to the real domain or hostnames used in deployment.
+- Enable `DJANGO_SECURE_SSL_REDIRECT=True` and a positive `DJANGO_SECURE_HSTS_SECONDS` value behind HTTPS.
+- Use Django admin permissions or custom views before exposing producer, consumer, S3, Glue, or Athena controls.
+
+## Pipeline Setup Notes
 
 1. Launch an EC2 instance and install Kafka.
 2. Create a Kafka topic for stock market events.
