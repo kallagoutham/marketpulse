@@ -300,6 +300,29 @@ python3 kafka_consumer.py \
 
 The consumer commits Kafka offsets only after a batch is successfully uploaded to S3.
 
+## Land Data in S3 from the Django UI
+
+Start the Django app and open:
+
+```text
+http://127.0.0.1:8000/consumer/
+```
+
+From this page you can provide:
+
+- Kafka broker
+- Kafka topic
+- Consumer group
+- S3 bucket
+- S3 prefix
+- AWS region
+- Batch size
+- Max messages
+- From-beginning replay option
+- Idle timeout for quiet topics
+
+Click `Land Data in S3` to start a background consumer run. The run table shows status, uploaded message count, destination bucket, prefix, and errors.
+
 ## Outcome
 
 This architecture demonstrates a practical real-time analytics pipeline using common data engineering tools. It supports event ingestion, streaming, object storage, schema discovery, metadata cataloging, and SQL-based analytics over stock market data.

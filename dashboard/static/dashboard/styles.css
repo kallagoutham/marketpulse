@@ -369,6 +369,13 @@ h3 {
   color: var(--blue);
 }
 
+.s3-key {
+  color: var(--blue);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 760px) {
   .topbar {
     align-items: flex-start;

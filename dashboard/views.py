@@ -1,4 +1,5 @@
 import os
+import time
 
 from django.contrib import messages
 from django.http import HttpResponse
@@ -6,7 +7,8 @@ from django.shortcuts import redirect, render
 
 from kafka_producer import REQUIRED_FIELDS
 
-from .forms import ProducerRunForm
+from .consumer_runner import CONSUMER_RUNS, start_consumer_run
+from .forms import ConsumerRunForm, ProducerRunForm
 from .producer_runner import (
     RUNS,
     get_bootstrap_servers,
@@ -103,6 +105,60 @@ def producer(request):
             "has_active_runs": has_active_runs,
             "bootstrap_servers": bootstrap_servers,
             "bootstrap_servers_configured": bool(bootstrap_servers),
+        },
+    )
+
+
+def consumer(request):
+    bootstrap_servers = get_bootstrap_servers()
+    initial = {
+        "bootstrap_servers": bootstrap_servers,
+        "topic": os.environ.get("KAFKA_TOPIC", ""),
+        "group_id": (
+            f"{os.environ.get('KAFKA_CONSUMER_GROUP', 'marketpulse-s3-consumer')}-"
+            f"ui-{int(time.time())}"
+        ),
+        "bucket": os.environ.get("S3_BUCKET_NAME", ""),
+        "prefix": os.environ.get("S3_OUTPUT_PREFIX", "stock-market-events"),
+        "region": os.environ.get("AWS_REGION", "us-east-1"),
+        "batch_size": int(os.environ.get("CONSUMER_BATCH_SIZE", "500")),
+        "flush_interval": float(
+            os.environ.get("CONSUMER_FLUSH_INTERVAL_SECONDS", "10")
+        ),
+        "idle_timeout": float(os.environ.get("CONSUMER_IDLE_TIMEOUT_SECONDS", "30")),
+        "max_messages": int(os.environ.get("CONSUMER_UI_MAX_MESSAGES", "10")),
+        "from_beginning": True,
+    }
+    form = ConsumerRunForm(initial=initial)
+
+    if request.method == "POST":
+        form = ConsumerRunForm(request.POST)
+        if form.is_valid():
+            run_id = start_consumer_run(
+                bootstrap_servers=form.cleaned_data["bootstrap_servers"],
+                topic=form.cleaned_data["topic"],
+                group_id=form.cleaned_data["group_id"],
+                bucket=form.cleaned_data["bucket"],
+                prefix=form.cleaned_data["prefix"],
+                region=form.cleaned_data["region"],
+                batch_size=form.cleaned_data["batch_size"],
+                flush_interval=form.cleaned_data["flush_interval"],
+                idle_timeout=form.cleaned_data["idle_timeout"],
+                max_messages=form.cleaned_data["max_messages"],
+                from_beginning=form.cleaned_data.get("from_beginning", False),
+            )
+            messages.success(request, f"S3 consumer run started: {run_id}")
+            return redirect("dashboard:consumer")
+
+    runs = sorted(CONSUMER_RUNS.values(), key=lambda item: item["id"], reverse=True)
+    has_active_runs = any(run["status"] in {"queued", "running"} for run in runs)
+    return render(
+        request,
+        "dashboard/consumer.html",
+        {
+            "form": form,
+            "runs": runs,
+            "has_active_runs": has_active_runs,
         },
     )
 

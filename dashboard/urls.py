@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("architecture/", views.architecture, name="architecture"),
     path("producer/", views.producer, name="producer"),
+    path("consumer/", views.consumer, name="consumer"),
     path(
         "producer/sample-template/",
         views.sample_dataset_template,

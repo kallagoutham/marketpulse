@@ -83,6 +83,12 @@ def parse_args() -> argparse.Namespace:
         help="Maximum seconds to wait before flushing a partial batch.",
     )
     parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=float(os.environ.get("CONSUMER_IDLE_TIMEOUT_SECONDS", "30")),
+        help="Stop if no Kafka messages arrive for this many seconds. Use 0 to disable.",
+    )
+    parser.add_argument(
         "--max-messages",
         type=int,
         default=int(os.environ.get("CONSUMER_MAX_MESSAGES", "0")),
@@ -111,24 +117,99 @@ def build_consumer(
     from_beginning: bool,
 ):
     try:
-        from kafka import KafkaConsumer
+        from kafka import KafkaConsumer, TopicPartition
     except ImportError as exc:
         raise SystemExit(
             "Missing dependency: kafka-python. Install dependencies with "
             "`pip install -r requirements.txt`."
         ) from exc
 
-    return KafkaConsumer(
-        topic,
+    consumer = KafkaConsumer(
         bootstrap_servers=[
             server.strip() for server in bootstrap_servers.split(",") if server.strip()
         ],
         group_id=group_id,
         enable_auto_commit=False,
         auto_offset_reset="earliest" if from_beginning else "latest",
-        value_deserializer=decode_message,
         consumer_timeout_ms=1000,
     )
+
+    if from_beginning:
+        partitions = consumer.partitions_for_topic(topic)
+        if not partitions:
+            raise RuntimeError(
+                f"Kafka topic does not exist or has no partitions: {topic}"
+            )
+        topic_partitions = [
+            TopicPartition(topic, partition) for partition in partitions
+        ]
+        beginning_offsets = consumer.beginning_offsets(topic_partitions)
+        end_offsets = consumer.end_offsets(topic_partitions)
+        consumer.assign(topic_partitions)
+        print(f"Assigned partitions from beginning: {topic_partitions}")
+        for topic_partition in topic_partitions:
+            consumer.seek(topic_partition, beginning_offsets[topic_partition])
+            print(
+                f"Seeked {topic_partition}: "
+                f"beginning={beginning_offsets[topic_partition]} "
+                f"end={end_offsets[topic_partition]} "
+                f"position={consumer.position(topic_partition)}"
+            )
+    else:
+        consumer.subscribe([topic])
+
+    return consumer
+
+
+def print_cluster_metadata(consumer) -> None:
+    cluster = consumer._client.cluster
+    brokers = sorted(
+        f"{broker.node_id}@{broker.host}:{broker.port}" for broker in cluster.brokers()
+    )
+    print(f"Kafka metadata brokers: {', '.join(brokers) if brokers else 'none'}")
+
+
+def get_topic_offsets(*, bootstrap_servers: str, topic: str) -> dict[str, int]:
+    try:
+        from confluent_kafka import Consumer, TopicPartition
+    except ImportError as exc:
+        raise SystemExit(
+            "Missing dependency: confluent-kafka. Install dependencies with "
+            "`pip install -r requirements.txt`."
+        ) from exc
+
+    consumer = Consumer(
+        {
+            "bootstrap.servers": bootstrap_servers,
+            "group.id": f"marketpulse-offset-check-{uuid4().hex}",
+            "enable.auto.commit": False,
+            "auto.offset.reset": "earliest",
+        }
+    )
+    try:
+        metadata = consumer.list_topics(topic, timeout=10)
+        topic_metadata = metadata.topics.get(topic)
+        if topic_metadata is None or topic_metadata.error is not None:
+            return {"partitions": 0, "beginning_offset": 0, "end_offset": 0}
+
+        beginning_offset = 0
+        end_offset = 0
+        for partition_id in topic_metadata.partitions.keys():
+            low, high = consumer.get_watermark_offsets(
+                TopicPartition(topic, partition_id),
+                timeout=10,
+                cached=False,
+            )
+            beginning_offset += low
+            end_offset += high
+
+        return {
+            "partitions": len(topic_metadata.partitions),
+            "beginning_offset": beginning_offset,
+            "end_offset": end_offset,
+        }
+    finally:
+        consumer.close()
 
 
 def build_s3_client(region: str):
@@ -179,13 +260,18 @@ def upload_batch(
 
 
 def make_record(message) -> dict[str, Any]:
+    value = (
+        decode_message(message.value)
+        if isinstance(message.value, bytes)
+        else message.value
+    )
     return {
         "topic": message.topic,
         "partition": message.partition,
         "offset": message.offset,
         "key": message.key.decode("utf-8") if message.key else None,
         "consumed_at": datetime.now(timezone.utc).isoformat(),
-        "value": message.value,
+        "value": value,
     }
 
 
@@ -197,9 +283,9 @@ def flush_batch(
     prefix: str,
     topic: str,
     batch: list[dict[str, Any]],
-) -> int:
+) -> tuple[int, str]:
     if not batch:
-        return 0
+        return 0, ""
 
     key = upload_batch(
         s3_client=s3_client,
@@ -210,7 +296,142 @@ def flush_batch(
     )
     consumer.commit()
     print(f"Uploaded {len(batch)} messages to s3://{bucket}/{key}")
-    return len(batch)
+    return len(batch), key
+
+
+def make_confluent_record(message) -> dict[str, Any]:
+    key = message.key()
+    value = message.value()
+    return {
+        "topic": message.topic(),
+        "partition": message.partition(),
+        "offset": message.offset(),
+        "key": key.decode("utf-8") if key else None,
+        "consumed_at": datetime.now(timezone.utc).isoformat(),
+        "value": decode_message(value) if isinstance(value, bytes) else value,
+    }
+
+
+def run_confluent_consumer_to_s3(
+    *,
+    bootstrap_servers: str,
+    topic: str,
+    group_id: str,
+    bucket: str,
+    prefix: str,
+    region: str,
+    batch_size: int,
+    flush_interval: float,
+    idle_timeout: float,
+    max_messages: int,
+    from_beginning: bool,
+    progress_callback=None,
+) -> int:
+    try:
+        from confluent_kafka import Consumer, KafkaError, TopicPartition
+    except ImportError as exc:
+        raise SystemExit(
+            "Missing dependency: confluent-kafka. Install dependencies with "
+            "`pip install -r requirements.txt`."
+        ) from exc
+
+    s3_client = build_s3_client(region)
+    consumer = Consumer(
+        {
+            "bootstrap.servers": bootstrap_servers,
+            "group.id": group_id,
+            "enable.auto.commit": False,
+            "auto.offset.reset": "earliest" if from_beginning else "latest",
+        }
+    )
+
+    batch: list[dict[str, Any]] = []
+    consumed_count = 0
+    last_flush_time = time.monotonic()
+    last_message_time = time.monotonic()
+
+    try:
+        if from_beginning:
+            metadata = consumer.list_topics(topic, timeout=10)
+            topic_metadata = metadata.topics.get(topic)
+            if topic_metadata is None or topic_metadata.error is not None:
+                raise RuntimeError(f"Kafka topic metadata is unavailable: {topic}")
+
+            partitions = [
+                TopicPartition(topic, partition_id, 0)
+                for partition_id in topic_metadata.partitions.keys()
+            ]
+            consumer.assign(partitions)
+            print(f"Assigned confluent partitions from beginning: {partitions}")
+        else:
+            consumer.subscribe([topic])
+
+        while True:
+            message = consumer.poll(1.0)
+            if message is None:
+                if (
+                    idle_timeout
+                    and time.monotonic() - last_message_time >= idle_timeout
+                ):
+                    print(
+                        f"No Kafka messages received for {idle_timeout:g} seconds; stopping."
+                    )
+                    break
+            elif message.error():
+                if message.error().code() != KafkaError._PARTITION_EOF:
+                    raise RuntimeError(message.error())
+            else:
+                last_message_time = time.monotonic()
+                batch.append(make_confluent_record(message))
+                consumed_count += 1
+
+                if len(batch) >= batch_size:
+                    uploaded, s3_key = flush_batch(
+                        consumer=consumer,
+                        s3_client=s3_client,
+                        bucket=bucket,
+                        prefix=prefix,
+                        topic=topic,
+                        batch=batch,
+                    )
+                    if progress_callback:
+                        progress_callback(uploaded, s3_key)
+                    batch.clear()
+                    last_flush_time = time.monotonic()
+
+                if max_messages and consumed_count >= max_messages:
+                    break
+
+            if batch and time.monotonic() - last_flush_time >= flush_interval:
+                uploaded, s3_key = flush_batch(
+                    consumer=consumer,
+                    s3_client=s3_client,
+                    bucket=bucket,
+                    prefix=prefix,
+                    topic=topic,
+                    batch=batch,
+                )
+                if progress_callback:
+                    progress_callback(uploaded, s3_key)
+                batch.clear()
+                last_flush_time = time.monotonic()
+
+        if batch:
+            uploaded, s3_key = flush_batch(
+                consumer=consumer,
+                s3_client=s3_client,
+                bucket=bucket,
+                prefix=prefix,
+                topic=topic,
+                batch=batch,
+            )
+            if progress_callback:
+                progress_callback(uploaded, s3_key)
+            batch.clear()
+    finally:
+        consumer.close()
+
+    return consumed_count
 
 
 def main() -> int:
@@ -232,64 +453,35 @@ def main() -> int:
     print(f"S3 destination: s3://{bucket}/{args.prefix.strip('/')}/")
     print(f"Consumer group: {args.group_id}")
 
-    consumer = build_consumer(
+    offsets = get_topic_offsets(bootstrap_servers=bootstrap_servers, topic=topic)
+    print(
+        "Topic offsets: "
+        f"partitions={offsets['partitions']} "
+        f"beginning={offsets['beginning_offset']} "
+        f"end={offsets['end_offset']}"
+    )
+    if offsets["partitions"] == 0:
+        print(
+            f"Kafka topic does not exist or has no partitions: {topic}", file=sys.stderr
+        )
+        return 1
+    if offsets["end_offset"] == 0:
+        print(f"Kafka topic has 0 messages available: {topic}", file=sys.stderr)
+        return 1
+
+    consumed_count = run_confluent_consumer_to_s3(
         bootstrap_servers=bootstrap_servers,
         topic=topic,
         group_id=args.group_id,
+        bucket=bucket,
+        prefix=args.prefix,
+        region=args.region,
+        batch_size=args.batch_size,
+        flush_interval=args.flush_interval,
+        idle_timeout=args.idle_timeout,
+        max_messages=args.max_messages,
         from_beginning=args.from_beginning,
     )
-    s3_client = build_s3_client(args.region)
-
-    batch: list[dict[str, Any]] = []
-    consumed_count = 0
-    last_flush_time = time.monotonic()
-
-    try:
-        while not stop_requested:
-            for message in consumer:
-                batch.append(make_record(message))
-                consumed_count += 1
-
-                if len(batch) >= args.batch_size:
-                    flush_batch(
-                        consumer=consumer,
-                        s3_client=s3_client,
-                        bucket=bucket,
-                        prefix=args.prefix,
-                        topic=topic,
-                        batch=batch,
-                    )
-                    batch.clear()
-                    last_flush_time = time.monotonic()
-
-                if args.max_messages and consumed_count >= args.max_messages:
-                    stop_requested = True
-                    break
-
-            if batch and time.monotonic() - last_flush_time >= args.flush_interval:
-                flush_batch(
-                    consumer=consumer,
-                    s3_client=s3_client,
-                    bucket=bucket,
-                    prefix=args.prefix,
-                    topic=topic,
-                    batch=batch,
-                )
-                batch.clear()
-                last_flush_time = time.monotonic()
-
-        if batch:
-            flush_batch(
-                consumer=consumer,
-                s3_client=s3_client,
-                bucket=bucket,
-                prefix=args.prefix,
-                topic=topic,
-                batch=batch,
-            )
-            batch.clear()
-    finally:
-        consumer.close()
 
     print(f"Consumer stopped. Total messages uploaded: {consumed_count}")
     return 0
