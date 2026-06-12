@@ -1,0 +1,131 @@
+# Stock Market Real-Time Data Analysis Using Kafka
+
+End-to-end data engineering project for simulating stock market events, streaming them through Apache Kafka, storing raw market data in Amazon S3, cataloging it with AWS Glue, and querying it with Amazon Athena.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    dataset[(CSV Stock Market Dataset)]
+    app[Python Stock Market App Simulation]
+    producer[Kafka Producer<br/>Python + Boto3]
+    kafka[(Apache Kafka<br/>Amazon EC2)]
+    consumer[Kafka Consumer]
+    s3[(Amazon S3<br/>Raw Stock Data)]
+    crawler[AWS Glue Crawler]
+    catalog[(AWS Glue Data Catalog)]
+    athena[Amazon Athena<br/>SQL Analytics]
+
+    dataset --> app
+    app --> producer
+    producer --> kafka
+    kafka --> consumer
+    consumer --> s3
+    s3 --> crawler
+    crawler --> catalog
+    catalog --> athena
+    s3 --> athena
+```
+
+## Data Flow
+
+1. A historical CSV stock market dataset is used as the source data.
+2. A Python stock market simulation app reads the dataset and emits records like live market events.
+3. The Kafka producer publishes simulated stock events into a Kafka topic.
+4. Apache Kafka runs on an Amazon EC2 instance and acts as the streaming message broker.
+5. The Kafka consumer reads events from the Kafka topic.
+6. The consumer writes streaming output to Amazon S3 for durable object storage.
+7. AWS Glue Crawler scans the S3 data and infers the table schema.
+8. AWS Glue Data Catalog stores table metadata for downstream analytics.
+9. Amazon Athena queries the S3 data using SQL.
+
+## Main Components
+
+| Component | Purpose |
+| --- | --- |
+| CSV Dataset | Source stock market data used for simulation. |
+| Python App | Reads CSV rows and simulates real-time stock events. |
+| Kafka Producer | Sends stock records to a Kafka topic. |
+| Apache Kafka on EC2 | Distributed streaming platform for ingesting events. |
+| Kafka Consumer | Reads Kafka messages and persists them to S3. |
+| Amazon S3 | Stores raw or processed stock market data files. |
+| AWS Glue Crawler | Detects schema and partitions from S3 data. |
+| AWS Glue Data Catalog | Central metadata catalog for Athena queries. |
+| Amazon Athena | Serverless SQL query engine for analysis. |
+
+## Example Stock Event Schema
+
+```json
+{
+  "symbol": "AAPL",
+  "trade_time": "2026-06-12T09:30:00Z",
+  "open": 194.25,
+  "high": 196.10,
+  "low": 193.80,
+  "close": 195.64,
+  "volume": 4839200
+}
+```
+
+## Example Athena Queries
+
+```sql
+-- Preview latest stock events
+SELECT *
+FROM stock_market_data
+ORDER BY trade_time DESC
+LIMIT 10;
+
+-- Average closing price by symbol
+SELECT
+  symbol,
+  AVG(close) AS avg_close_price
+FROM stock_market_data
+GROUP BY symbol
+ORDER BY avg_close_price DESC;
+
+-- Total traded volume by symbol
+SELECT
+  symbol,
+  SUM(volume) AS total_volume
+FROM stock_market_data
+GROUP BY symbol
+ORDER BY total_volume DESC;
+```
+
+## Suggested Project Structure
+
+```text
+marketpulse/
+├── data/
+│   └── indexProcessed.csv
+├── kafka_producer.py
+├── kafka_consumer.py
+├── requirements.txt
+└── README.md
+```
+
+## Prerequisites
+
+- Python 3.10 or later
+- Apache Kafka
+- AWS account
+- Amazon EC2 instance for Kafka
+- Amazon S3 bucket
+- AWS Glue database and crawler
+- Amazon Athena query setup
+- AWS CLI configured with appropriate permissions
+
+## Setup Notes
+
+1. Launch an EC2 instance and install Kafka.
+2. Create a Kafka topic for stock market events.
+3. Configure the producer to read the CSV dataset and publish messages to Kafka.
+4. Configure the consumer to read from Kafka and write records to S3.
+5. Create an AWS Glue crawler that points to the S3 bucket or prefix.
+6. Run the crawler to populate the AWS Glue Data Catalog.
+7. Query the cataloged data from Amazon Athena.
+
+## Outcome
+
+This architecture demonstrates a practical real-time analytics pipeline using common data engineering tools. It supports event ingestion, streaming, object storage, schema discovery, metadata cataloging, and SQL-based analytics over stock market data.
