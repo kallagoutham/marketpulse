@@ -261,6 +261,45 @@ Uploaded files must follow the stock market template columns:
 Index, Date, Open, High, Low, Close, Adj Close, Volume, CloseUSD
 ```
 
+## Consume Kafka Data to S3
+
+The project includes `kafka_consumer.py`, which reads JSON messages from Kafka and uploads them to S3 as newline-delimited JSON files.
+
+Configure these values in `.env`:
+
+```text
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-s3-bucket-name
+S3_OUTPUT_PREFIX=stock-market-events
+KAFKA_BOOTSTRAP_SERVERS=your-kafka-host:9092
+KAFKA_TOPIC=your-kafka-topic
+KAFKA_CONSUMER_GROUP=marketpulse-s3-consumer
+```
+
+Run the consumer:
+
+```bash
+python3 kafka_consumer.py
+```
+
+Or use the Makefile:
+
+```bash
+make s3-consumer
+```
+
+Useful one-time verification command:
+
+```bash
+python3 kafka_consumer.py \
+  --topic testing-topic-from-UI \
+  --from-beginning \
+  --max-messages 10 \
+  --batch-size 10
+```
+
+The consumer commits Kafka offsets only after a batch is successfully uploaded to S3.
+
 ## Outcome
 
 This architecture demonstrates a practical real-time analytics pipeline using common data engineering tools. It supports event ingestion, streaming, object storage, schema discovery, metadata cataloging, and SQL-based analytics over stock market data.

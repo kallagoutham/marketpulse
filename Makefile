@@ -13,13 +13,17 @@ REPLICATION_FACTOR ?= 1
 GROUP ?= test-group
 MAX_MESSAGES ?= 10
 TIMEOUT_MS ?= 10000
+S3_BUCKET ?= $(S3_BUCKET_NAME)
+S3_PREFIX ?= $(S3_OUTPUT_PREFIX)
+FROM_BEGINNING ?=
 
 -include .env
 
 BOOTSTRAP_SERVER ?= $(KAFKA_BOOTSTRAP_SERVERS)
 TOPIC ?= $(KAFKA_TOPIC)
+CONSUMER_MAX_MESSAGES ?= 0
 
-.PHONY: help shell create-topic list-topics describe-topic delete-topic producer consumer consumer-from-beginning consume-sample dataset-producer groups describe-group offsets
+.PHONY: help shell create-topic list-topics describe-topic delete-topic producer consumer consumer-from-beginning consume-sample dataset-producer s3-consumer groups describe-group offsets
 
 help:
 	@echo "Kafka Makefile commands:"
@@ -53,6 +57,9 @@ help:
 	@echo ""
 	@echo "  make dataset-producer"
 	@echo "      Publish dataset/indexProcessed.csv to Kafka using kafka_producer.py"
+	@echo ""
+	@echo "  make s3-consumer"
+	@echo "      Consume Kafka messages and upload JSONL batches to S3"
 	@echo ""
 	@echo "  make groups"
 	@echo "      List consumer groups"
@@ -121,6 +128,15 @@ dataset-producer:
 	python3 kafka_producer.py \
 		--bootstrap-servers $(BOOTSTRAP_SERVER) \
 		--topic $(TOPIC)
+
+s3-consumer:
+	python3 kafka_consumer.py \
+		--bootstrap-servers $(BOOTSTRAP_SERVER) \
+		--topic $(TOPIC) \
+		--bucket $(S3_BUCKET) \
+		--prefix $(S3_PREFIX) \
+		--max-messages $(CONSUMER_MAX_MESSAGES) \
+		$(FROM_BEGINNING)
 
 groups:
 	docker exec -it $(KAFKA_CONTAINER) $(KAFKA_BIN)/kafka-consumer-groups.sh \
