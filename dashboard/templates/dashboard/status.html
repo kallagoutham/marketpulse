@@ -1,0 +1,31 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}MarketPulse Status{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">Status</p>
+  <h1>Pipeline readiness</h1>
+</section>
+
+<section class="content-band">
+  <table class="status-table">
+    <thead>
+      <tr>
+        <th>Stage</th>
+        <th>Status</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for stage in stages %}
+        <tr>
+          <td>{{ stage.name }}</td>
+          <td><span class="pill">{{ stage.status }}</span></td>
+          <td>{{ stage.description }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

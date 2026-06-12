@@ -8,13 +8,18 @@
 
 KAFKA_CONTAINER ?= kafka
 KAFKA_BIN ?= /opt/kafka/bin
-BOOTSTRAP_SERVER ?= localhost:9092
-TOPIC ?= test-topic
 PARTITIONS ?= 1
 REPLICATION_FACTOR ?= 1
 GROUP ?= test-group
+MAX_MESSAGES ?= 10
+TIMEOUT_MS ?= 10000
 
-.PHONY: help shell create-topic list-topics describe-topic delete-topic producer consumer consumer-from-beginning groups describe-group offsets
+-include .env
+
+BOOTSTRAP_SERVER ?= $(KAFKA_BOOTSTRAP_SERVERS)
+TOPIC ?= $(KAFKA_TOPIC)
+
+.PHONY: help shell create-topic list-topics describe-topic delete-topic producer consumer consumer-from-beginning consume-sample dataset-producer groups describe-group offsets
 
 help:
 	@echo "Kafka Makefile commands:"
@@ -43,6 +48,12 @@ help:
 	@echo "  make consumer-from-beginning TOPIC=test-topic"
 	@echo "      Consume topic messages from beginning"
 	@echo ""
+	@echo "  make consume-sample TOPIC=test-topic MAX_MESSAGES=10"
+	@echo "      Read a sample of existing topic messages from beginning"
+	@echo ""
+	@echo "  make dataset-producer"
+	@echo "      Publish dataset/indexProcessed.csv to Kafka using kafka_producer.py"
+	@echo ""
 	@echo "  make groups"
 	@echo "      List consumer groups"
 	@echo ""
@@ -56,6 +67,7 @@ shell:
 create-topic:
 	docker exec -it $(KAFKA_CONTAINER) $(KAFKA_BIN)/kafka-topics.sh \
 		--create \
+		--if-not-exists \
 		--topic $(TOPIC) \
 		--bootstrap-server $(BOOTSTRAP_SERVER) \
 		--partitions $(PARTITIONS) \
@@ -95,6 +107,20 @@ consumer-from-beginning:
 		--bootstrap-server $(BOOTSTRAP_SERVER) \
 		--from-beginning \
 		--group $(GROUP)
+
+consume-sample:
+	docker exec -it $(KAFKA_CONTAINER) $(KAFKA_BIN)/kafka-console-consumer.sh \
+		--topic $(TOPIC) \
+		--bootstrap-server $(BOOTSTRAP_SERVER) \
+		--from-beginning \
+		--max-messages $(MAX_MESSAGES) \
+		--timeout-ms $(TIMEOUT_MS) \
+		--group $(GROUP)
+
+dataset-producer:
+	python3 kafka_producer.py \
+		--bootstrap-servers $(BOOTSTRAP_SERVER) \
+		--topic $(TOPIC)
 
 groups:
 	docker exec -it $(KAFKA_CONTAINER) $(KAFKA_BIN)/kafka-consumer-groups.sh \

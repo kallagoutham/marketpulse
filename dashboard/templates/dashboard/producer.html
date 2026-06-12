@@ -1,0 +1,129 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}MarketPulse Producer{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">Producer</p>
+  <h1>Publish a stock dataset to Kafka</h1>
+</section>
+
+<section class="content-band producer-layout">
+  <form class="producer-form" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          <p class="message {{ message.tags }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if not bootstrap_servers_configured %}
+      <p class="message error">KAFKA_BOOTSTRAP_SERVERS is missing from .env.</p>
+    {% else %}
+      <p class="message info">Default Kafka broker from .env: {{ bootstrap_servers }}</p>
+    {% endif %}
+
+    <div class="form-field">
+      <label for="{{ form.bootstrap_servers.id_for_label }}">Kafka broker</label>
+      {{ form.bootstrap_servers }}
+      <p class="help-text">Use the broker advertised by your Kafka cluster. Multiple brokers can be comma-separated.</p>
+      {{ form.bootstrap_servers.errors }}
+    </div>
+
+    <div class="form-field">
+      <label for="{{ form.topic.id_for_label }}">Kafka topic</label>
+      {{ form.topic }}
+      {{ form.topic.errors }}
+    </div>
+
+    <div class="form-field">
+      <label for="{{ form.dataset.id_for_label }}">Dataset file</label>
+      {{ form.dataset }}
+      <div class="field-help-row">
+        <p class="help-text">Accepted template columns: Index, Date, Open, High, Low, Close, Adj Close, Volume, CloseUSD.</p>
+        <a class="secondary-button" href="{% url 'dashboard:sample_dataset_template' %}">Download Sample Format</a>
+      </div>
+      {{ form.dataset.errors }}
+    </div>
+
+    <div class="form-row">
+      <div class="form-field">
+        <label for="{{ form.delay.id_for_label }}">Delay seconds</label>
+        {{ form.delay }}
+        {{ form.delay.errors }}
+      </div>
+      <div class="form-field">
+        <label for="{{ form.limit.id_for_label }}">Row limit</label>
+        {{ form.limit }}
+        {{ form.limit.errors }}
+      </div>
+    </div>
+
+    <label class="checkbox-field" for="{{ form.create_topic.id_for_label }}">
+      {{ form.create_topic }}
+      <span>Create topic if missing</span>
+    </label>
+
+    <button class="primary-button" type="submit">Send Data to Kafka</button>
+  </form>
+
+  <aside class="producer-help">
+    <h2>Runtime behavior</h2>
+    <p>The app prefills the broker from `.env`, lets you override it per run, creates the topic when requested, then publishes the uploaded file in a background thread.</p>
+    <p>Use `0` for row limit to publish every row. For large files, keep delay at `0` unless you intentionally want slower simulation.</p>
+  </aside>
+</section>
+
+<section class="content-band">
+  <div class="section-header">
+    <h2>Producer Runs</h2>
+    <p>Recent runs are kept in memory while the Django server is running.</p>
+  </div>
+
+  <table class="status-table">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Topic</th>
+        <th>Broker</th>
+        <th>Dataset</th>
+        <th>Messages</th>
+        <th>Limit</th>
+        <th>Started</th>
+        <th>Finished</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+        <tr>
+          <td><span class="pill">{{ run.status }}</span></td>
+          <td>{{ run.topic }}</td>
+          <td>{{ run.bootstrap_servers|default:"-" }}</td>
+          <td>{{ run.dataset }}</td>
+          <td>{{ run.messages_sent }}</td>
+          <td>{{ run.limit }}</td>
+          <td>{{ run.started_at|default:"-" }}</td>
+          <td>{{ run.finished_at|default:"-" }}</td>
+          <td>{{ run.error|default:"-" }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="9">No producer runs yet.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if has_active_runs %}
+  <script>
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 3000);
+  </script>
+{% endif %}
+{% endblock %}

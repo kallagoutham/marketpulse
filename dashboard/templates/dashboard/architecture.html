@@ -1,0 +1,42 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}MarketPulse Architecture{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">Architecture</p>
+  <h1>Stock market streaming flow</h1>
+</section>
+
+<section class="architecture">
+  <div class="node">CSV Dataset</div>
+  <div class="arrow">-></div>
+  <div class="node">Python Producer</div>
+  <div class="arrow">-></div>
+  <div class="node primary">Kafka on EC2</div>
+  <div class="arrow">-></div>
+  <div class="node">Consumer</div>
+  <div class="arrow">-></div>
+  <div class="node storage">Amazon S3</div>
+  <div class="arrow">-></div>
+  <div class="node">Glue Crawler</div>
+  <div class="arrow">-></div>
+  <div class="node">Glue Catalog</div>
+  <div class="arrow">-></div>
+  <div class="node analytics">Athena</div>
+</section>
+
+<section class="content-band">
+  <div class="section-header">
+    <h2>How the Pieces Connect</h2>
+    <p>The Django app acts as the secure application layer around this data pipeline.</p>
+  </div>
+  <ol class="flow-list">
+    <li>Stock rows are read from a CSV dataset.</li>
+    <li>The producer simulates market events and publishes messages to Kafka.</li>
+    <li>The consumer reads messages and writes event files into S3.</li>
+    <li>Glue crawls S3 and creates catalog metadata.</li>
+    <li>Athena queries the cataloged S3 data with SQL.</li>
+  </ol>
+</section>
+{% endblock %}

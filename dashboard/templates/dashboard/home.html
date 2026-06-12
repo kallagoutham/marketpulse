@@ -1,0 +1,56 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}MarketPulse Overview{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Kafka data engineering project</p>
+    <h1>Real-time stock market analysis pipeline</h1>
+    <p class="lede">
+      A standalone Django control plane for the Kafka, EC2, S3, Glue, and Athena architecture.
+      Keep secrets in environment variables, expose operational views through authenticated Django
+      features, and grow the project into a secure data platform.
+    </p>
+  </div>
+</section>
+
+<section class="content-band">
+  <div class="section-header">
+    <h2>Pipeline Stages</h2>
+    <p>Current project modules and cloud services represented in the initial architecture.</p>
+  </div>
+  <div class="stage-grid">
+    {% for stage in stages %}
+      <article class="stage-card">
+        <div class="stage-card__top">
+          <h3>{{ stage.name }}</h3>
+          <span>{{ stage.status }}</span>
+        </div>
+        <p>{{ stage.description }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="content-band muted">
+  <div class="section-header">
+    <h2>Security Direction</h2>
+    <p>Django gives the project a safer operating layer around the streaming pipeline.</p>
+  </div>
+  <div class="feature-list">
+    <div>
+      <h3>Environment-based secrets</h3>
+      <p>AWS keys, Kafka endpoints, S3 buckets, and Django secrets stay outside source code.</p>
+    </div>
+    <div>
+      <h3>Admin and auth ready</h3>
+      <p>Django admin, sessions, CSRF protection, password validation, and user permissions are available.</p>
+    </div>
+    <div>
+      <h3>Operational dashboard</h3>
+      <p>The web app can expand into producer controls, consumer status, Athena query history, and S3 ingestion checks.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

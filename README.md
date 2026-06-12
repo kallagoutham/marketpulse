@@ -196,6 +196,71 @@ http://127.0.0.1:8000/
 6. Run the crawler to populate the AWS Glue Data Catalog.
 7. Query the cataloged data from Amazon Athena.
 
+## Publish the Dataset to Kafka
+
+The project includes `kafka_producer.py`, which reads `dataset/indexProcessed.csv` and publishes each row as a JSON event to Kafka.
+
+Default Kafka settings:
+
+```text
+Bootstrap server: KAFKA_BOOTSTRAP_SERVERS from .env
+Topic: KAFKA_TOPIC from .env
+Dataset: dataset/indexProcessed.csv
+```
+
+Create the topic from your Kafka container or EC2 Kafka shell:
+
+```bash
+make create-topic
+```
+
+Run a consumer to verify messages:
+
+```bash
+make consumer-from-beginning
+```
+
+Publish the dataset:
+
+```bash
+make dataset-producer
+```
+
+You can also run the producer directly:
+
+```bash
+python3 kafka_producer.py \
+  --dataset dataset/indexProcessed.csv
+```
+
+To test with only a few records:
+
+```bash
+python3 kafka_producer.py --limit 10 --delay 0
+```
+
+## Publish from the Django UI
+
+Start the Django app and open:
+
+```text
+http://127.0.0.1:8000/producer/
+```
+
+From this page you can:
+
+- Enter a custom Kafka topic.
+- Upload a `.csv`, `.xlsx`, or `.xlsm` dataset.
+- Create the topic if it does not already exist.
+- Publish all rows or only a limited number of rows.
+- Track the run status while the Django server is running.
+
+Uploaded files must follow the stock market template columns:
+
+```text
+Index, Date, Open, High, Low, Close, Adj Close, Volume, CloseUSD
+```
+
 ## Outcome
 
 This architecture demonstrates a practical real-time analytics pipeline using common data engineering tools. It supports event ingestion, streaming, object storage, schema discovery, metadata cataloging, and SQL-based analytics over stock market data.
