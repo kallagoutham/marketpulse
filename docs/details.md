@@ -38,13 +38,10 @@ Application -> Data warehouse
 
 But this architecture becomes fragile as the system grows.
 
-What happens if the data warehouse is temporarily unavailable? Should the source application stop and wait?
-
-What happens if one consumer processes only 100 events per second while the source produces 1,000?
-
-What happens when a new fraud-detection service needs the same historical events? Does the source application need to resend everything?
-
-What happens if a downstream service processes an event successfully but crashes before recording that progress?
+- What happens if the data warehouse is temporarily unavailable? Should the source application stop and wait?
+- What happens if one consumer processes only 100 events per second while the source produces 1,000?
+- What happens when a new fraud-detection service needs the same historical events? Does the source application need to resend everything?
+- What happens if a downstream service processes an event successfully but crashes before recording that progress?
 
 Direct connections create tight coupling. The producer needs to understand every consumer, every failure mode, and often every retry policy. Adding another consumer increases the producer's responsibility.
 
